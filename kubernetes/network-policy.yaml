@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: devops-demo-app-netpol
+  namespace: devops-platform
+  labels:
+    app: devops-demo-app
+    app.kubernetes.io/name: devops-demo-app
+    app.kubernetes.io/part-of: devops-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: devops-demo-app
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow incoming HTTP/metrics traffic to application container port 5000
+    - ports:
+        - protocol: TCP
+          port: 5000
+  egress:
+    # Allow DNS resolution queries via UDP and TCP on port 53
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

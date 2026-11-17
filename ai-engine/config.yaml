@@ -1,0 +1,35 @@
+prometheus:
+  url: "http://localhost:9090"
+  query_interval: 30  # seconds
+
+thresholds:
+  cpu_high: 80
+  cpu_low: 20
+  memory_high: 85
+  error_rate_high: 10
+  pod_restart_max: 3
+  latency_p95_max: 1.0
+
+scaling:
+  min_replicas: 2
+  max_replicas: 10
+  scale_up_count: 2
+  scale_down_count: 1
+  cooldown_period: 300  # seconds
+
+actions:
+  kubectl_path: "kubectl"
+  ansible_path: "ansible-playbook"
+  ansible_playbooks_dir: "../ansible/playbooks"
+  namespace: "devops-platform"
+  deployment: "devops-demo-app"
+
+notifications:
+  enabled: true
+  slack_webhook: ""
+  log_file: "ai_engine.log"
+
+ml:
+  enabled: false
+  anomaly_model_path: "models/anomaly_detector.pkl"
+  training_data_hours: 24

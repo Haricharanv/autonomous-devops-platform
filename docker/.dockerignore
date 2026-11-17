@@ -1,0 +1,73 @@
+# ==============================================================================
+# .dockerignore for Intelligent Autonomous DevOps Deployment Platform
+# ==============================================================================
+
+# Git and Version Control
+.git
+.gitignore
+.gitattributes
+
+# Python Bytecode and Caches
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.nox
+
+# Virtual Environments
+venv
+.venv
+ENV
+env
+venv.bak
+env.bak
+
+# Local Environment and Secret Files
+.env
+.env.*
+*.local
+
+# Tests and Coverage Reports
+tests
+tests/
+app/tests
+app/tests/
+
+# Documentation
+docs
+docs/
+*.md
+LICENSE
+
+# CI/CD Workflows
+.github
+.github/
+
+# Infrastructure and Configuration (not needed inside application container)
+ansible
+ansible/
+kubernetes
+kubernetes/
+monitoring
+monitoring/
+scripts
+scripts/
+ai-engine
+ai-engine/
+docker
+docker/
+Dockerfile*
+docker-compose*.yml
+
+# IDE and Editor Files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

@@ -1,0 +1,101 @@
+---
+- name: Scale Application Deployment Replicas
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "{{ kubeconfig_path | default('~/.kube/config') }}"
+    app_namespace: "{{ app_namespace | default('devops-platform') }}"
+    app_name: "{{ app_name | default('devops-demo-app') }}"
+    rollout_timeout: "180s"
+
+  tasks:
+    - name: Validate replicas variable is defined
+      ansible.builtin.assert:
+        that:
+          - replicas is defined
+        fail_msg: "Error: The 'replicas' variable is required. Example usage: ansible-playbook playbooks/scale.yml -e replicas=3"
+        success_msg: "'replicas' variable provided: {{ replicas }}"
+
+    - name: Validate replicas is an integer between 1 and 20
+      ansible.builtin.assert:
+        that:
+          - replicas | string | regex_search('^[0-9]+$')
+          - (replicas | int) >= 1
+          - (replicas | int) <= 20
+        fail_msg: "Validation error: 'replicas' must be an integer between 1 and 20. Provided value: {{ replicas }}"
+        success_msg: "'replicas' value {{ replicas }} is within valid range (1-20)."
+
+    - name: Check if kubectl executable is available
+      ansible.builtin.command:
+        cmd: which kubectl
+      register: kubectl_check
+      changed_when: false
+      failed_when: kubectl_check.rc != 0
+
+    - name: Verify Kubernetes cluster connectivity
+      ansible.builtin.command:
+        cmd: "kubectl cluster-info --kubeconfig={{ kubeconfig_path }}"
+      register: cluster_connectivity
+      changed_when: false
+      failed_when: cluster_connectivity.rc != 0
+
+    - name: Retrieve replica count before scaling
+      ansible.builtin.command:
+        cmd: "kubectl get deployment {{ app_name }} -n {{ app_namespace }} -o jsonpath='{.spec.replicas}' --kubeconfig={{ kubeconfig_path }}"
+      register: previous_replica_count
+      changed_when: false
+
+    - name: Scale the deployment to target replicas
+      ansible.builtin.command:
+        cmd: "kubectl scale deployment/{{ app_name }} --replicas={{ replicas }} -n {{ app_namespace }} --kubeconfig={{ kubeconfig_path }}"
+      register: scale_result
+      changed_when: "'scaled' in scale_result.stdout"
+
+    - name: Wait for scaling rollout to complete
+      ansible.builtin.command:
+        cmd: "kubectl rollout status deployment/{{ app_name }} -n {{ app_namespace }} --timeout={{ rollout_timeout }} --kubeconfig={{ kubeconfig_path }}"
+      register: scale_status
+      changed_when: false
+
+    - name: Wait for deployment Available condition
+      ansible.builtin.command:
+        cmd: "kubectl wait --for=condition=Available deployment/{{ app_name }} -n {{ app_namespace }} --timeout={{ rollout_timeout }} --kubeconfig={{ kubeconfig_path }}"
+      register: wait_available
+      changed_when: false
+
+    - name: Retrieve active pod count
+      ansible.builtin.shell:
+        cmd: "kubectl get pods -n {{ app_namespace }} -l app={{ app_name }} --no-headers --kubeconfig={{ kubeconfig_path }} | wc -l"
+      register: active_pod_count
+      changed_when: false
+
+    - name: Retrieve ready replicas from deployment status
+      ansible.builtin.command:
+        cmd: "kubectl get deployment {{ app_name }} -n {{ app_namespace }} -o jsonpath='{.status.readyReplicas}' --kubeconfig={{ kubeconfig_path }}"
+      register: ready_replicas
+      changed_when: false
+
+    - name: Retrieve updated pod list
+      ansible.builtin.command:
+        cmd: "kubectl get pods -n {{ app_namespace }} -l app={{ app_name }} -o wide --kubeconfig={{ kubeconfig_path }}"
+      register: pods_info
+      changed_when: false
+
+    - name: Print new pod count and scaling summary
+      ansible.builtin.debug:
+        msg:
+          - "========================================================"
+          - "             SCALING COMPLETED                          "
+          - "========================================================"
+          - "Application:         {{ app_name }}"
+          - "Namespace:           {{ app_namespace }}"
+          - "Previous Replicas:   {{ previous_replica_count.stdout }}"
+          - "Target Replicas:     {{ replicas }}"
+          - "Ready Replicas:      {{ ready_replicas.stdout }}"
+          - "Total Pod Count:     {{ active_pod_count.stdout | trim }}"
+          - "--------------------------------------------------------"
+          - "Active Pods:"
+          - "{{ pods_info.stdout_lines }}"
+          - "========================================================"

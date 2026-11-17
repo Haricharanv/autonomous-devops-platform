@@ -1,0 +1,89 @@
+---
+- name: Restart Application Deployment via Rolling Restart
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "{{ kubeconfig_path | default('~/.kube/config') }}"
+    app_namespace: "{{ app_namespace | default('devops-platform') }}"
+    app_name: "{{ app_name | default('devops-demo-app') }}"
+    rollout_timeout: "180s"
+
+  tasks:
+    - name: Check if kubectl executable is available
+      ansible.builtin.command:
+        cmd: which kubectl
+      register: kubectl_check
+      changed_when: false
+      failed_when: kubectl_check.rc != 0
+
+    - name: Verify Kubernetes cluster connectivity
+      ansible.builtin.command:
+        cmd: "kubectl cluster-info --kubeconfig={{ kubeconfig_path }}"
+      register: cluster_connectivity
+      changed_when: false
+      failed_when: cluster_connectivity.rc != 0
+
+    - name: Check if deployment exists
+      ansible.builtin.command:
+        cmd: "kubectl get deployment {{ app_name }} -n {{ app_namespace }} --kubeconfig={{ kubeconfig_path }}"
+      register: deployment_check
+      changed_when: false
+      failed_when: deployment_check.rc != 0
+
+    - name: Rollout restart the deployment
+      ansible.builtin.command:
+        cmd: "kubectl rollout restart deployment/{{ app_name }} -n {{ app_namespace }} --kubeconfig={{ kubeconfig_path }}"
+      register: restart_result
+      changed_when: "'restarted' in restart_result.stdout or restart_result.rc == 0"
+
+    - name: Wait for restart rollout to complete
+      ansible.builtin.command:
+        cmd: "kubectl rollout status deployment/{{ app_name }} -n {{ app_namespace }} --timeout={{ rollout_timeout }} --kubeconfig={{ kubeconfig_path }}"
+      register: restart_status
+      changed_when: false
+
+    - name: Verify all pods are running
+      ansible.builtin.command:
+        cmd: "kubectl get pods -n {{ app_namespace }} -l app={{ app_name }} -o jsonpath='{.items[*].status.phase}' --kubeconfig={{ kubeconfig_path }}"
+      register: pod_phases
+      changed_when: false
+      failed_when: "'Running' not in pod_phases.stdout or 'Pending' in pod_phases.stdout or 'Failed' in pod_phases.stdout"
+
+    - name: Verify all pod containers are ready
+      ansible.builtin.command:
+        cmd: "kubectl get pods -n {{ app_namespace }} -l app={{ app_name }} -o jsonpath='{.items[*].status.containerStatuses[*].ready}' --kubeconfig={{ kubeconfig_path }}"
+      register: container_readiness
+      changed_when: false
+      failed_when: "'false' in container_readiness.stdout or container_readiness.stdout == ''"
+
+    - name: Retrieve updated deployment status
+      ansible.builtin.command:
+        cmd: "kubectl get deployment {{ app_name }} -n {{ app_namespace }} -o wide --kubeconfig={{ kubeconfig_path }}"
+      register: deployment_info
+      changed_when: false
+
+    - name: Retrieve updated pod list
+      ansible.builtin.command:
+        cmd: "kubectl get pods -n {{ app_namespace }} -l app={{ app_name }} -o wide --kubeconfig={{ kubeconfig_path }}"
+      register: pods_info
+      changed_when: false
+
+    - name: Print Restart Verification Report
+      ansible.builtin.debug:
+        msg:
+          - "========================================================"
+          - "             RESTART SUCCESSFUL                         "
+          - "========================================================"
+          - "Application:      {{ app_name }}"
+          - "Namespace:        {{ app_namespace }}"
+          - "Rollout Status:   {{ restart_status.stdout }}"
+          - "Pod Phases:       {{ pod_phases.stdout }}"
+          - "--------------------------------------------------------"
+          - "Deployment Information:"
+          - "{{ deployment_info.stdout_lines }}"
+          - "--------------------------------------------------------"
+          - "Running Pods:"
+          - "{{ pods_info.stdout_lines }}"
+          - "========================================================"

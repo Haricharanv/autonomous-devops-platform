@@ -1,0 +1,106 @@
+---
+- name: Rollback Application Deployment
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "{{ kubeconfig_path | default('~/.kube/config') }}"
+    app_namespace: "{{ app_namespace | default('devops-platform') }}"
+    app_name: "{{ app_name | default('devops-demo-app') }}"
+    revision: "{{ revision | default('previous') }}"
+    rollout_timeout: "180s"
+
+  tasks:
+    - name: Check if kubectl executable is available
+      ansible.builtin.command:
+        cmd: which kubectl
+      register: kubectl_check
+      changed_when: false
+      failed_when: kubectl_check.rc != 0
+
+    - name: Verify Kubernetes cluster connectivity
+      ansible.builtin.command:
+        cmd: "kubectl cluster-info --kubeconfig={{ kubeconfig_path }}"
+      register: cluster_connectivity
+      changed_when: false
+      failed_when: cluster_connectivity.rc != 0
+
+    - name: Fetch current rollout history before rollback
+      ansible.builtin.command:
+        cmd: "kubectl rollout history deployment/{{ app_name }} -n {{ app_namespace }} --kubeconfig={{ kubeconfig_path }}"
+      register: pre_rollback_history
+      changed_when: false
+
+    - name: Rollback deployment to previous revision
+      ansible.builtin.command:
+        cmd: "kubectl rollout undo deployment/{{ app_name }} -n {{ app_namespace }} --kubeconfig={{ kubeconfig_path }}"
+      when: (revision | lower) in ['previous', '', '0', 'none']
+      register: undo_previous_result
+      changed_when: "'rolled back' in undo_previous_result.stdout or undo_previous_result.rc == 0"
+
+    - name: Rollback deployment to specific revision
+      ansible.builtin.command:
+        cmd: "kubectl rollout undo deployment/{{ app_name }} --to-revision={{ revision }} -n {{ app_namespace }} --kubeconfig={{ kubeconfig_path }}"
+      when: (revision | lower) not in ['previous', '', '0', 'none']
+      register: undo_revision_result
+      changed_when: "'rolled back' in undo_revision_result.stdout or undo_revision_result.rc == 0"
+
+    - name: Wait for rollback rollout to complete
+      ansible.builtin.command:
+        cmd: "kubectl rollout status deployment/{{ app_name }} -n {{ app_namespace }} --timeout={{ rollout_timeout }} --kubeconfig={{ kubeconfig_path }}"
+      register: rollback_status
+      changed_when: false
+
+    - name: Verify pods are running after rollback
+      ansible.builtin.command:
+        cmd: "kubectl get pods -n {{ app_namespace }} -l app={{ app_name }} -o jsonpath='{.items[*].status.phase}' --kubeconfig={{ kubeconfig_path }}"
+      register: pod_phases
+      changed_when: false
+      failed_when: "'Running' not in pod_phases.stdout"
+
+    - name: Verify pod containers are healthy and ready
+      ansible.builtin.command:
+        cmd: "kubectl get pods -n {{ app_namespace }} -l app={{ app_name }} -o jsonpath='{.items[*].status.containerStatuses[*].ready}' --kubeconfig={{ kubeconfig_path }}"
+      register: container_readiness
+      changed_when: false
+      failed_when: "'false' in container_readiness.stdout or container_readiness.stdout == ''"
+
+    - name: Retrieve updated rollout history
+      ansible.builtin.command:
+        cmd: "kubectl rollout history deployment/{{ app_name }} -n {{ app_namespace }} --kubeconfig={{ kubeconfig_path }}"
+      register: post_rollback_history
+      changed_when: false
+
+    - name: Retrieve updated deployment status
+      ansible.builtin.command:
+        cmd: "kubectl get deployment {{ app_name }} -n {{ app_namespace }} -o wide --kubeconfig={{ kubeconfig_path }}"
+      register: deployment_info
+      changed_when: false
+
+    - name: Retrieve pod list after rollback
+      ansible.builtin.command:
+        cmd: "kubectl get pods -n {{ app_namespace }} -l app={{ app_name }} -o wide --kubeconfig={{ kubeconfig_path }}"
+      register: pods_info
+      changed_when: false
+
+    - name: Print Rollback Status Report
+      ansible.builtin.debug:
+        msg:
+          - "========================================================"
+          - "             ROLLBACK SUCCESSFUL                        "
+          - "========================================================"
+          - "Application:      {{ app_name }}"
+          - "Namespace:        {{ app_namespace }}"
+          - "Target Revision:  {{ revision }}"
+          - "Rollout Status:   {{ rollback_status.stdout }}"
+          - "--------------------------------------------------------"
+          - "Deployment Information:"
+          - "{{ deployment_info.stdout_lines }}"
+          - "--------------------------------------------------------"
+          - "Healthy Pods:"
+          - "{{ pods_info.stdout_lines }}"
+          - "--------------------------------------------------------"
+          - "Rollout History:"
+          - "{{ post_rollback_history.stdout_lines }}"
+          - "========================================================"

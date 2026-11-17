@@ -1,0 +1,108 @@
+---
+- name: Kubernetes Deployment Status and Health Check
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "{{ kubeconfig_path | default('~/.kube/config') }}"
+    app_namespace: "{{ app_namespace | default('devops-platform') }}"
+    app_name: "{{ app_name | default('devops-demo-app') }}"
+
+  tasks:
+    - name: Check if kubectl executable is available
+      ansible.builtin.command:
+        cmd: which kubectl
+      register: kubectl_check
+      changed_when: false
+      failed_when: kubectl_check.rc != 0
+
+    - name: Verify Kubernetes cluster connectivity
+      ansible.builtin.command:
+        cmd: "kubectl cluster-info --kubeconfig={{ kubeconfig_path }}"
+      register: cluster_connectivity
+      changed_when: false
+      failed_when: cluster_connectivity.rc != 0
+
+    - name: Verify application namespace exists
+      ansible.builtin.command:
+        cmd: "kubectl get namespace {{ app_namespace }} --kubeconfig={{ kubeconfig_path }}"
+      register: namespace_check
+      changed_when: false
+      failed_when: false
+
+    - name: Get deployment status
+      ansible.builtin.command:
+        cmd: "kubectl get deployment {{ app_name }} -n {{ app_namespace }} -o wide --kubeconfig={{ kubeconfig_path }}"
+      register: deployment_status
+      changed_when: false
+      failed_when: false
+
+    - name: Get pod status
+      ansible.builtin.command:
+        cmd: "kubectl get pods -n {{ app_namespace }} -l app={{ app_name }} -o wide --kubeconfig={{ kubeconfig_path }}"
+      register: pod_status
+      changed_when: false
+      failed_when: false
+
+    - name: Get service information
+      ansible.builtin.command:
+        cmd: "kubectl get svc -n {{ app_namespace }} -l app={{ app_name }} -o wide --kubeconfig={{ kubeconfig_path }}"
+      register: service_status
+      changed_when: false
+      failed_when: false
+
+    - name: Get service endpoints
+      ansible.builtin.command:
+        cmd: "kubectl get endpoints -n {{ app_namespace }} -l app={{ app_name }} -o wide --kubeconfig={{ kubeconfig_path }}"
+      register: endpoints_status
+      changed_when: false
+      failed_when: false
+
+    - name: Get Minikube service URL
+      ansible.builtin.command:
+        cmd: "minikube service {{ app_name }} -n {{ app_namespace }} --url"
+      register: minikube_service_url
+      changed_when: false
+      failed_when: false
+
+    - name: Get HPA status
+      ansible.builtin.command:
+        cmd: "kubectl get hpa -n {{ app_namespace }} --kubeconfig={{ kubeconfig_path }}"
+      register: hpa_status
+      changed_when: false
+      failed_when: false
+
+    - name: Get recent namespace events
+      ansible.builtin.command:
+        cmd: "kubectl get events -n {{ app_namespace }} --sort-by='.metadata.creationTimestamp' --kubeconfig={{ kubeconfig_path }}"
+      register: recent_events
+      changed_when: false
+      failed_when: false
+
+    - name: Print Comprehensive Status Report
+      ansible.builtin.debug:
+        msg:
+          - "================================================================================"
+          - "             INTELLIGENT AUTONOMOUS DEVOPS PLATFORM STATUS REPORT               "
+          - "================================================================================"
+          - "Application:     {{ app_name }}"
+          - "Namespace:       {{ app_namespace }}"
+          - "Service URL:     {{ minikube_service_url.stdout if (minikube_service_url.rc == 0 and minikube_service_url.stdout != '') else 'N/A' }}"
+          - "--------------------------------------------------------------------------------"
+          - "[1] DEPLOYMENT STATUS:"
+          - "{{ deployment_status.stdout_lines if deployment_status.rc == 0 else ['Deployment not found or error: ' ~ deployment_status.stderr] }}"
+          - "--------------------------------------------------------------------------------"
+          - "[2] POD STATUS:"
+          - "{{ pod_status.stdout_lines if pod_status.rc == 0 else ['No pods found or error: ' ~ pod_status.stderr] }}"
+          - "--------------------------------------------------------------------------------"
+          - "[3] SERVICE & ENDPOINTS INFO:"
+          - "{{ service_status.stdout_lines if service_status.rc == 0 else ['Service not found: ' ~ service_status.stderr] }}"
+          - "{{ endpoints_status.stdout_lines if endpoints_status.rc == 0 else [] }}"
+          - "--------------------------------------------------------------------------------"
+          - "[4] HORIZONTAL POD AUTOSCALER (HPA) STATUS:"
+          - "{{ hpa_status.stdout_lines if hpa_status.rc == 0 else ['HPA not found or metrics-server not available: ' ~ hpa_status.stderr] }}"
+          - "--------------------------------------------------------------------------------"
+          - "[5] RECENT CLUSTER EVENTS:"
+          - "{{ (recent_events.stdout_lines[-15:]) if recent_events.rc == 0 and recent_events.stdout_lines | length > 0 else ['No recent events found.'] }}"
+          - "================================================================================"
