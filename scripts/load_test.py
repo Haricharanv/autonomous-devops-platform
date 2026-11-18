@@ -35,6 +35,9 @@ class TerminalColors:
     RED = "\033[91m"
     BOLD = "\033[1m"
     DIM = "\033[2m"
+    PURPLE = "\033[35m"
+    WHITE = "\033[97m"
+    MAGENTA = "\033[95m"
     RESET = "\033[0m"
 
 

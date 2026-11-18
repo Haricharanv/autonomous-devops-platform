@@ -13,7 +13,7 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install application dependencies
-COPY app/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt && \
     find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
@@ -51,7 +51,7 @@ WORKDIR /app
 COPY --from=builder --chown=devops:devops /opt/venv /opt/venv
 
 # Copy only needed application code
-COPY --chown=devops:devops app/ /app/
+COPY --chown=devops:devops . /app/
 
 # Remove tests and cache from production image if any were copied
 RUN rm -rf /app/tests /app/__pycache__

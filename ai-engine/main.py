@@ -177,6 +177,7 @@ def main() -> int:
     setup_logging(log_file="ai_engine_system.log", verbose=cli_args.verbose)
 
     logger.info("Starting AI Decision Engine...")
+    config_path = Path(cli_args.config)
     logger.info("Configuration: %s", config_path)
     logger.info("Mode: %s | Dry-Run: %s", "Single-Run" if cli_args.once else "Continuous", cli_args.dry_run)
 

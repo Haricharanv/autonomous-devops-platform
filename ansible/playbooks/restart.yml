@@ -5,9 +5,9 @@
   gather_facts: false
 
   vars:
-    kubeconfig_path: "{{ kubeconfig_path | default('~/.kube/config') }}"
-    app_namespace: "{{ app_namespace | default('devops-platform') }}"
-    app_name: "{{ app_name | default('devops-demo-app') }}"
+    kubeconfig_path: "/home/haricharanv/.kube/config"
+    app_namespace: "devops-platform"
+    app_name: "devops-demo-app"
     rollout_timeout: "180s"
 
   tasks:
